@@ -45,8 +45,8 @@ static const unsigned   MEM_GAP_IX_EXPAND_FACTOR        = 2;
 typedef struct _node {
     alloc_t alloc_record;
     //Unsigned integers are always positive
-    unsigned used;  //This refers to if there IS DATA in the mem location
-    unsigned allocated; //This refers to if this location has been allocated in RAM, not neccessarily filled with data
+    unsigned used;  //Used = 1, allocated = 0 IS A GAP
+    unsigned allocated;
     struct _node * next; // Doubly-linked list for gap deletion
     struct _node * prev; // Doubly-linked list for gap deletion
 } node_t, *node_pt;
@@ -156,7 +156,7 @@ alloc_status mem_init() {
         debug("PASS: pool_store was NULL, attempting to calloc() for the pool_store\n");
         //pool_store is assigned a memory chunk here
         //  IS THIS A DOUBLE POINTER?????
-        pool_store = (pool_mgr_pt *)calloc(MEM_POOL_STORE_INIT_CAPACITY, sizeof(pool_mgr_t));
+        pool_store = (pool_mgr_pt *)calloc(MEM_POOL_STORE_INIT_CAPACITY, sizeof(pool_mgr_pt));
         //calloc returns NULL if it fails
         //This allocates MEM_POOL_STORE_INIT_CAPACITY number of pool_mgr_t structs
         //MEM_POOL_STORE_INIT_CAPACITY is == 20, so pool_store goes from pool_store[0]-pool_store[19]
@@ -193,19 +193,24 @@ alloc_status mem_free() {
     }
     if(pool_store != NULL){ //If pool_store is not NULL, then it exists
         debug("PASS: pool_store has been found, attempting to close all mem pools\n");
-        // make sure all pool managers have been deallocated
+        // make sure all pool managers have been de-allocated
         //loop through the pool managers, and call mem_pool_close() on them
         //Need to compare to pool_store_capacity, to ensure all structs are deallocated
         debug2("PASS: pool_store_capacity = %u\n", pool_store_capacity);
         for(int i=0; i < pool_store_capacity; (i++)){  //iterates through pool_store
-            alloc_status sts;
-            //free each pool, regardless of if it has data in it or not
-            //pool_store[i] is a value, and must be cast back to pointer type before being passed to mem_pool_close
-            debug2("    Attempting to deallocate pool_store[%d]\n", i);
-            sts = mem_pool_close((pool_pt) pool_store[i]);  //close the pool, and capture the status
-            assert(sts == ALLOC_OK); //make sure each deallocation happened successfully
+            if(pool_store[i] != NULL) {
+                alloc_status sts;
+                //free each pool, regardless of if it has data in it or not
+                //pool_store[i] is a value, and must be cast back to pointer type before being passed to mem_pool_close
+                debug2("    Attempting to deallocate pool_store[%d]\n", i);
+                sts = mem_pool_close((pool_pt) pool_store[i]);  //close the pool, and capture the status
+                //assert(sts == ALLOC_OK); //make sure each de-allocation happened successfully
+                if(sts != ALLOC_OK){
+                    return ALLOC_FAIL;
+                }
+            }
         }
-        debug("PASS: pool_store has been successfully deallocated\n");
+        debug("PASS: pool_store has been successfully de-allocated\n");
         // can free the pool store array now
         free(pool_store);  //frees the memory allocated to the pool_store list
     
@@ -397,7 +402,7 @@ alloc_status mem_pool_close(pool_pt pool) {
         if(pool->num_allocs == 0){
             // free memory pool
             free(local_pool_manager_pt->pool.mem);
-            free(pool);
+            //free(pool);
             // free node heap
             free(local_pool_manager_pt->node_heap);
             // free gap index
@@ -526,7 +531,7 @@ void mem_inspect_pool(pool_pt pool,
     pool_mgr_pt local_pool_mgr_pt = (pool_mgr_pt)pool;
     // allocate the segments array
         //There are "used_nodes" number of segments to be generated - one for each used_node of the pool_mgr_t
-    pool_segment_pt segments_array = (pool_segment_pt)calloc(local_pool_mgr_pt->used_nodes, sizeof(pool_segment_t))
+    pool_segment_pt segments_array = (pool_segment_pt)calloc(local_pool_mgr_pt->used_nodes, sizeof(pool_segment_t));
     // check if successful
         //A fail will be indicated by the segments_array pointer being == NULL
         //This will only happen if the calloc failed
@@ -540,13 +545,15 @@ void mem_inspect_pool(pool_pt pool,
     }
     //local_pool_mgr_pt->node_heap[0] is the first element
     //Iterates through until .next == NULL, which means we reached the end of the list
+    //MAKE SURE YOU LOOP THROUGH THE LINKED LIST AND NOT THE NODE_HEAP ARRAY
+    //BECAUSE - the linked list is in order, and the node_heap is NOT
     int i = 0;
         //Yea yea, you don't have to explicitly check for NULL here
     while(local_pool_mgr_pt->node_heap[i].next != NULL){
         //Assign the allocated property to the segments array for each allocated node in node_heap
         //for each node, write the size and allocated in the segments
-        segments[i].allocated = local_pool_mgr_pt->node_heap[i].alloc_record.size;
-        segments[i].size = local_pool_mgr_pt->node_heap[i].allocated;
+        segments_array[i].allocated = local_pool_mgr_pt->node_heap[i].alloc_record.size;
+        segments_array[i].size = local_pool_mgr_pt->node_heap[i].allocated;
         ++i;
     }
     
