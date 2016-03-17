@@ -523,16 +523,38 @@ void mem_inspect_pool(pool_pt pool,
                       unsigned *num_segments) {
     debug("FUNCTION CALL: mem_inspect_pool() has been called\n");
     // get the mgr from the pool
-    // allocate the segments array with size == used_nodes
-    // check successful
-    // loop through the node heap and the segments array
-    //    for each node, write the size and allocated in the segment
+    pool_mgr_pt local_pool_mgr_pt = (pool_mgr_pt)pool;
+    // allocate the segments array
+        //There are "used_nodes" number of segments to be generated - one for each used_node of the pool_mgr_t
+    pool_segment_pt segments_array = (pool_segment_pt)calloc(local_pool_mgr_pt->used_nodes, sizeof(pool_segment_t))
+    // check if successful
+        //A fail will be indicated by the segments_array pointer being == NULL
+        //This will only happen if the calloc failed
+    if(segments_array == NULL){
+        return;  //Cannot return anything, as this method has no return type
+    }
+    // loop through the node heap
+        //Check and make sure node_heap[0] is the head of the list
+    if(local_pool_mgr_pt->node_heap[0].prev != NULL){
+        debug("FAIL: mem_inspect_pool() : node_heap[0].prev is not NULL - It is not the head of the list!");
+    }
+    //local_pool_mgr_pt->node_heap[0] is the first element
+    //Iterates through until .next == NULL, which means we reached the end of the list
+    int i = 0;
+        //Yea yea, you don't have to explicitly check for NULL here
+    while(local_pool_mgr_pt->node_heap[i].next != NULL){
+        //Assign the allocated property to the segments array for each allocated node in node_heap
+        //for each node, write the size and allocated in the segments
+        segments[i].allocated = local_pool_mgr_pt->node_heap[i].alloc_record.size;
+        segments[i].size = local_pool_mgr_pt->node_heap[i].allocated;
+        ++i;
+    }
+    
     // "return" the values:
-    /*
-                    *segments = segs;
-                    *num_segments = pool_mgr->used_nodes;
-     */
-     debug("FUNCTION NOT YET IMPLEMENTED\n");
+        //Code given by Ivo in the default file below:
+    *segments = segments_array;
+    *num_segments = local_pool_mgr_pt->used_nodes;
+     return;
 }
 
 
