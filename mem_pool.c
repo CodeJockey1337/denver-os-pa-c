@@ -8,7 +8,7 @@
  *
  * Group:
  *  Ross Baldwin
- *  Jedediah
+ *  Jedediah Hernandez
  *  Christopher
  *  M. Ryan Wingard
  */
@@ -458,30 +458,117 @@ alloc_pt mem_new_alloc(pool_pt pool, size_t size) {
         exit(1);  //FAIL
     }
     // check used nodes fewer than total nodes, quit on error
-    if(local_pool_mgr_pt->total_nodes < local_pool_mgr_pt->used_nodes){
+    if(local_pool_mgr_pt->total_nodes <= local_pool_mgr_pt->used_nodes){
         debug("FAIL: Used nodes > total nodes.  Logical error has happened somewhere!");
         exit(1); //FAIL
     }
+
     // get a node for allocation:
+    node_pt new_node_pt;
+    int i = 0;
+
     // if FIRST_FIT, then find the first sufficient node in the node heap
+    if(pool->policy == FIRST_FIT) {
+        node_pt this_node = local_pool_mgr_pt->node_heap;
+        while ((local_pool_mgr_pt->node_heap[i].allocated != 0)
+               || (local_pool_mgr_pt->node_heap[i].alloc_record.size < size)
+                  && i < local_pool_mgr_pt->total_nodes) {
+            ++i;
+        }
+
+        if ( i == local_pool_mgr_pt->total_nodes) {
+            return NULL;
+        }
+
+        new_node_pt = &local_pool_mgr_pt->node_heap[i];
+    }
     // if BEST_FIT, then find the first sufficient node in the gap index
+    if(pool->policy == BEST_FIT){
+        if(pool->num_gaps > 0 ){
+            //Check and see that we have not iterated past the number of gaps
+            //The first gap which is >= to size IS THE BEST FIT, because the gap_ix is sorted!
+            for(int j=0; j < pool->num_gaps; j++) {
+                if( local_pool_mgr_pt->gap_ix[j].size >= size){
+                    new_node_pt = local_pool_mgr_pt->gap_ix[j].node;
+                    break;
+                }
+            }
+        }
+    }
+    else{
+        //Neither best fit not first fit have worked, something went wrong
+        debug("FAIL: FIRST_FIT or BEST_FIT have failed in mem_new_alloc\n");
+        return NULL;
+    }
+
     // check if node found
+    if(new_node_pt == NULL){
+        debug("FAIL: mem_new_alloc failed to assign a node to the new_node_pt (it is NULL)\n");
+        return NULL;
+    }
     // update metadata (num_allocs, alloc_size)
+    pool->num_allocs++;
+    pool->alloc_size += size;
     // calculate the size of the remaining gap, if any
+    int size_of_gap = 0;
+    //We are looking at the size of the alloc_record FOR THIS SPECIFIC NODE, not the whole pool
+    if(new_node_pt->alloc_record.size - size > 0){
+        size_of_gap = new_node_pt->alloc_record.size - size;
+    }
     // remove node from gap index
+    status = _mem_remove_from_gap_ix(local_pool_mgr_pt, size, new_node_pt);
+    //Check and make sure this worked
+    if( status != ALLOC_OK){
+        //Someting went wrong
+        debug("FAIL: Alloc status passed back from _mem_remove_from_gap_ix was a failure condition\n");
+        return NULL;
+    }
     // convert gap_node to an allocation node of given size
+    //An allocated and used node has used = 1, allocated = 1
+    new_node_pt->allocated = 1;
+    new_node_pt->used = 1;
+    new_node_pt->alloc_record.size = size;
+
     // adjust node heap:
     //   if remaining gap, need a new node
-    //   find an unused one in the node heap
-    //   make sure one was found
-    //   initialize it to a gap node
-    //   update metadata (used_nodes)
-    //   update linked list (new node right after the node for allocation)
-    //   add to gap index
-    //   check if successful
+    //This new node is a gap of the size of the remaining open pool space
+    if(size_of_gap > 0) {
+        int s = 0;
+        //   find an unused one in the node heap
+        while (local_pool_mgr_pt->node_heap[s].used != 0) {
+            s++;
+        }
+        node_pt new_gap_created = &local_pool_mgr_pt->node_heap[s];
+        //   make sure one was found
+        if (new_gap_created == NULL) {
+            debug("FAIL: newly created gap_t was NULL\n");
+            return NULL;
+        }
+        //   initialize it to a gap node
+        new_gap_created->used = 1;
+        new_gap_created->allocated = 0;
+        //This sets the new gap node to be equal to the size of our "remainder" from allocating the
+        // last alloc
+        new_gap_created->alloc_record.size = size_of_gap;
+
+        //   update metadata (used_nodes)
+        local_pool_mgr_pt->used_nodes++;
+        //_mem_resize_node_heap will have incremented total_nodes for us, so no need to do that here
+
+        //   update linked list (new node right after the node for allocation)
+        new_gap_created->next = new_node_pt->next;
+        if (new_node_pt->next != NULL) {
+            new_node_pt->next->prev = new_gap_created;
+        }
+        new_node_pt->next = new_gap_created;
+        new_gap_created->prev = new_node_pt;
+        //   add to gap index
+        _mem_add_to_gap_ix(local_pool_mgr_pt, size_of_gap, new_gap_created);
+        //   check if successful?
+        //****TODO******??
+    }
     // return allocation record by casting the node to (alloc_pt)
-    debug("FUNCTION NOT YET IMPLEMENTED - RETURNING ALLOC_FAIL\n");
-    return NULL;
+    return (alloc_pt) new_node_pt;
 }
 
 
@@ -651,23 +738,26 @@ static alloc_status _mem_resize_node_heap(pool_mgr_pt pool_mgr_ptr) {
 
 
 
-//Code by Ryan
+//Code by Ryan and Ross
 static alloc_status _mem_resize_gap_ix(pool_mgr_pt pool_mgr) {
-//    debug("FUNCTION CALL: _mem_resize_gap_ix() has been called\n");
-////    // see above
-////    //check if gap_ix needs to be expanded
-////    if(((float)pool_mgr->pool.num_gaps / pool_mgr->gap_ix_capacity) > MEM_GAP_IX_FILL_FACTOR){
-////        //reallocate gap_ix
-////        pool_mgr->gap_ix = realloc(pool_mgr->gap_ix, MEM_GAP_IX_EXPAND_FACTOR * pool_mgr->gap_ix_capacity * sizeof(gap_t));
-////        //was realloc succesful?
-////        if(pool_mgr->gap_ix != NULL){
-////            //increase gap capacity
-////            pool_mgr->gap_ix_capacity *= MEM_GAP_IX_EXPAND_FACTOR;
-////            return ALLOC_OK;
-////        }
-////    }
-//    ​debug("FUNCTION NOT YET IMPLEMENTED\n");
-//    return ALLOC_FAIL;
+    debug("FUNCTION CALL: _mem_resize_gap_ix() has been called\n");
+    float expandFactor = (float)MEM_GAP_IX_EXPAND_FACTOR * (float)pool_mgr->gap_ix_capacity;
+    //Does gap_ix need to be resized?
+    if((((float)pool_mgr->pool.num_gaps)/(pool_mgr->gap_ix_capacity)) > MEM_GAP_IX_FILL_FACTOR){
+        //resize if needed
+        //Perform realloc to increase size of gap_ix
+        pool_mgr->gap_ix = realloc(pool_mgr->gap_ix, expandFactor * sizeof(gap_t));
+        //update metadata
+        //  Expand the gap_ix_capacity by the same factor as the realloc
+        pool_mgr->gap_ix_capacity *= MEM_GAP_IX_EXPAND_FACTOR;
+        //Check and make sure it worked
+        if(NULL == pool_mgr->gap_ix){
+            debug("FAIL: realloc of gap_ix was catastrophic!!");
+            return ALLOC_FAIL;
+        }
+        return ALLOC_OK;
+    }
+    return ALLOC_OK;
 }
 
 
@@ -676,30 +766,20 @@ static alloc_status _mem_resize_gap_ix(pool_mgr_pt pool_mgr) {
 //Code by Ryan
 static alloc_status _mem_add_to_gap_ix(pool_mgr_pt pool_mgr, size_t size, node_pt node) {
     debug("FUNCTION CALL: _mem_add_to_gap_ix() has been called\n");
-//
-////    // expand the gap index, if necessary (call the function)
-////    _mem_resize_gap_ix(pool_mgr);
-////    // add the entry at the end
-////    // update metadata (num_gaps)
-////    // sort the gap index (call the function)
-////    _mem_sort_gap_ix(pool_mgr);
-////    // check success
-//
-//    // expand the gap index, if necessary (call the function)
-//    _mem_resize_gap_ix(pool_mgr);
-//    // add the entry at the end
-//    pool_mgr->gap_ix[pool_mgr->pool.num_gaps].node = node;
-//    pool_mgr->gap_ix[pool_mgr->pool.num_gaps].size = size;
-//    // update metadata (num_gaps)
-//    pool_mgr->pool.num_gaps ++;
-//    // sort the gap index (call the function)
-//    alloc_status sortCheck = _mem_sort_gap_ix(pool_mgr);
-//    // check success
-//    if(sortCheck == ALLOC_OK){
-//        return ALLOC_OK;
-//    }​
-//    return ALLOC_FAIL;
-    debug("FUNCTION NOT YET IMPLEMENTED - RETURNING ALLOC_FAIL");
+    // expand the gap index, if necessary (call the function)
+    _mem_resize_gap_ix(pool_mgr);
+    // add the entry at the end
+    //
+    pool_mgr->gap_ix[pool_mgr->pool.num_gaps].node = node;
+    pool_mgr->gap_ix[pool_mgr->pool.num_gaps].size = size;
+    // update metadata (num_gaps)
+    pool_mgr->pool.num_gaps++;
+    // sort the gap index (call the function)
+    alloc_status sortStatus = _mem_sort_gap_ix(pool_mgr);
+    // check success
+    if(sortStatus == ALLOC_OK){
+        return ALLOC_OK;
+    }
     return ALLOC_FAIL;
 }
 
@@ -711,14 +791,38 @@ static alloc_status _mem_remove_from_gap_ix(pool_mgr_pt pool_mgr,
                                             node_pt node) {
     debug("FUNCTION CALL: _mem_remove_from_gap_ix() has been called\n");
     // find the position of the node in the gap index
+    int position = 0;
+    //Flag to determine if a match has been found
+    int flag = 0;
+    for(position; position < pool_mgr->gap_ix_capacity; position++){
+        //If we find the node....
+        if(pool_mgr->gap_ix[position].node == node){
+            flag = 1;
+            break;
+        }
+    }
+    if(flag == 0){
+        debug("FAIL: flag == 0 in _mem_remove_from_gap_ix");
+        return ALLOC_FAIL;
+    }
     // loop from there to the end of the array:
-    //    pull the entries (i.e. copy over) one position up
-    //    this effectively deletes the chosen node
+    while(position < pool_mgr->pool.num_gaps){
+        //    pull the entries (i.e. copy over) one position up
+        //    this effectively deletes the chosen node
+        pool_mgr->gap_ix[position] = pool_mgr->gap_ix[position + 1];
+        position++;
+    }
     // update metadata (num_gaps)
+    pool_mgr->pool.num_gaps --;
     // zero out the element at position num_gaps!
+    //This final gap_t is a copy of the second to last gap_t, so we need to NULL it out
+    pool_mgr->gap_ix[pool_mgr->pool.num_gaps].size = 0;
+    pool_mgr->gap_ix[pool_mgr->pool.num_gaps].node = NULL;
 
-    debug("FUNCTION NOT YET IMPLEMENTED - RETURNING ALLOC_FAIL");
-    return ALLOC_FAIL;
+    //*****DO WE WANT TO SORT THE GAP_IX HERE?*******
+    //Don't think we need to....
+
+    return ALLOC_OK;
 }
 
 
