@@ -1,3 +1,12 @@
+/*
+* Written by group:
+*   Ross Baldwin
+*   Jedediah
+*   Christopher
+*   M. Ryan Wingard
+*/
+
+
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h> // for perror()
