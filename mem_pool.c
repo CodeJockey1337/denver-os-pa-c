@@ -706,32 +706,30 @@ void mem_inspect_pool(pool_pt pool,
 /*                                 */
 /***********************************/
 
-//Written 100% by Ross
+//Written by Ross
 /* TESTED IN MY OWN TESTING SUITE - PASSED */
 //This method is called from mem_pool_open()
 static alloc_status _mem_resize_pool_store() {
     debug("FUNCTION CALL: _mem_resize_pool_store() has been called\n");
-    
+    float expandFactor = pool_store_capacity * MEM_EXPAND_FACTOR;
     //Check if the pool_store needs to be resized
     //  "necessary" to resize when size/cap > 0.75
     if (((float)pool_store_size / (float)pool_store_capacity) > MEM_POOL_STORE_FILL_FACTOR){
-        debug("     attempting to resize pool_store; size/cap ratio has been reached\n");
-        
-        pool_store = (pool_mgr_pt *)realloc(pool_store, (sizeof(pool_mgr_t)*pool_store_capacity + 1));
+        pool_store = realloc(pool_store, (sizeof(pool_mgr_pt) * expandFactor));
         //Verify the realloc worked
         if(pool_store == NULL){
             debug("FAIL: realloc of pool_store was catastrophic!!!\n");
             return ALLOC_FAIL;
         }
-        //double check that pool_store isnt NULL after realloc
+        //double check that pool_store is not NULL after realloc
         assert(pool_store);
         //Update capacity variable
-        pool_store_capacity++;
-        debug("PASS: pool_store successfully resized - returning ALLOC_OK\n");
+        pool_store_capacity *= MEM_POOL_STORE_EXPAND_FACTOR;
+        debug("     pool_store successfully resized - returning ALLOC_OK\n");
         return ALLOC_OK;
     }
     
-    debug("PASS: pool_store did not need to be resized - returning ALLOC_OK\n");
+    debug("     pool_store did not need to be resized - returning ALLOC_OK\n");
     return ALLOC_OK;
 }
 
