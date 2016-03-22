@@ -295,7 +295,7 @@ alloc_pt mem_new_alloc(pool_pt pool, size_t size) {
     }
 
     // get a node for allocation:
-    node_pt new_node;
+    node_pt new_node = NULL;
     int i = 0;
 
     // if FIRST_FIT, then find the first sufficient node in the node heap
