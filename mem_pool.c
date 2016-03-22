@@ -551,7 +551,7 @@ static alloc_status _mem_resize_pool_store() {
     //  "necessary" to resize when size/cap > 0.75
     if (((float)pool_store_size / (float)pool_store_capacity) > MEM_POOL_STORE_FILL_FACTOR){
 
-        float expandFactor = pool_store_capacity * MEM_POOL_STORE_EXPAND_FACTOR;
+        unsigned int expandFactor = pool_store_capacity * MEM_POOL_STORE_EXPAND_FACTOR;
         pool_store = (pool_mgr_pt *)realloc(pool_store, (sizeof(pool_mgr_pt) * expandFactor));
         //Verify the realloc worked
         if(pool_store == NULL){
@@ -575,18 +575,17 @@ static alloc_status _mem_resize_node_heap(pool_mgr_pt pool_mgr_ptr) {
     //Check if the node_heap needs to be resized
     //  "necessary" to resize when size/cap > 0.75
     if(((float)pool_mgr_ptr->used_nodes / (float)pool_mgr_ptr->total_nodes) > MEM_NODE_HEAP_FILL_FACTOR){
-
+        unsigned int expandFactor = MEM_NODE_HEAP_EXPAND_FACTOR * pool_mgr_ptr->total_nodes;
         //Reallocate more nodes to the node_heap, by the size of the
         //Perform the realloc straight to the node_heap pointer
-        pool_mgr_ptr->node_heap = (node_pt)realloc(pool_mgr_ptr->node_heap,
-                                                   MEM_NODE_HEAP_EXPAND_FACTOR * pool_mgr_ptr->total_nodes * sizeof(node_t));
+        pool_mgr_ptr->node_heap = realloc(pool_mgr_ptr->node_heap, expandFactor * sizeof(node_t));
         //Check and see if the realloc failed
         if (NULL == pool_mgr_ptr->node_heap){
 
             return ALLOC_FAIL;
         }
         //Make sure to update the number of nodes!  This is a prop of the pool_mgr_t
-        pool_mgr_ptr->total_nodes *= MEM_NODE_HEAP_EXPAND_FACTOR;
+        pool_mgr_ptr->total_nodes = expandFactor;
 
         return ALLOC_OK;
     }
