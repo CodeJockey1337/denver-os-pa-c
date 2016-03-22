@@ -67,14 +67,15 @@ alloc_status mem_init() {
     }
 
     // allocate the pool store with initial capacity
-    pool_store = (pool_mgr_pt*) calloc(MEM_POOL_STORE_INIT_CAPACITY, sizeof(pool_mgr_pt));
+    pool_store = calloc(MEM_POOL_STORE_INIT_CAPACITY, sizeof(pool_mgr_pt));
 
     //sets the initial fill size to 0
-    pool_store_size = 0;
+    //pool_store_size = 0;
 
     //sets the initial pool store max capacity
     pool_store_capacity = MEM_POOL_STORE_INIT_CAPACITY;
 
+    assert(pool_store);
     if(pool_store != NULL) {
         return ALLOC_OK;
     }
@@ -147,7 +148,7 @@ pool_pt mem_pool_open(size_t size, alloc_policy policy) {
     }
 
     // allocate a new mem pool mgr
-    pool_mgr_pt mgr = (pool_mgr_pt) malloc(sizeof(pool_mgr_t));
+    pool_mgr_pt mgr = malloc(sizeof(pool_mgr_t));
 
     // check success, on error return null
     if(mgr == NULL){
@@ -155,7 +156,7 @@ pool_pt mem_pool_open(size_t size, alloc_policy policy) {
     }
 
     // allocate a new memory pool
-    mgr->pool.mem = (char *) malloc(size);
+    mgr->pool.mem = malloc(size);
 
     // check success, on error deallocate mgr and return null
     if(mgr->pool.mem == NULL){
@@ -193,7 +194,7 @@ pool_pt mem_pool_open(size_t size, alloc_policy policy) {
     mgr->node_heap[0].next = NULL;
     mgr->node_heap[0].prev = NULL;
     mgr->node_heap[0].allocated = 0;
-    mgr->node_heap[0].used = 0;
+    mgr->node_heap[0].used = 1;
     mgr->node_heap[0].alloc_record.mem = mgr->pool.mem;
     mgr->node_heap[0].alloc_record.size = size;
 
@@ -525,7 +526,7 @@ void mem_inspect_pool(pool_pt pool, pool_segment_pt *segments, unsigned *num_seg
     node_pt current = pool_mgr->node_heap;
 
     // loop through the node heap and the segments array
-    for(int i = 0; i < pool_mgr->used_nodes; ++i){
+    for(int i = 0; i < pool_mgr->used_nodes; i++){
         //    for each node, write the size and allocated in the segment
         segs[i].size = current->alloc_record.size;
         segs[i].allocated = current->allocated;
