@@ -662,7 +662,7 @@ alloc_status mem_del_alloc(pool_pt pool, alloc_pt alloc) {
 }
 
 
-//Written 100% by Ross
+//Written by Ross
 void mem_inspect_pool(pool_pt pool,
                       pool_segment_pt *segments,
                       unsigned *num_segments) {
@@ -675,28 +675,22 @@ void mem_inspect_pool(pool_pt pool,
     // check if successful
         //A fail will be indicated by the segments_array pointer being == NULL
         //This will only happen if the calloc failed
-    if(segments_array == NULL){
-        return;  //Cannot return anything, as this method has no return type
-    }
+    assert(segments_array != NULL);
+
     // loop through the node heap
-        //Check and make sure node_heap[0] is the head of the list
-    if(local_pool_mgr_pt->node_heap[0].prev != NULL){
-        debug("FAIL: mem_inspect_pool() : node_heap[0].prev is not NULL - It is not the head of the list!");
-    }
-    //local_pool_mgr_pt->node_heap[0] is the first element
-    //Iterates through until .next == NULL, which means we reached the end of the list
-    //MAKE SURE YOU LOOP THROUGH THE LINKED LIST AND NOT THE NODE_HEAP ARRAY
-    //BECAUSE - the linked list is in order, and the node_heap is NOT
+        //local_pool_mgr_pt->node_heap[0] is the first element
+        //Iterates through until .next == NULL, which means we reached the end of the list
+        //MAKE SURE YOU LOOP THROUGH THE LINKED LIST AND NOT THE NODE_HEAP ARRAY
+        //  BECAUSE - the linked list is in order, and the node_heap is NOT
     int i = 0;
         //Yea yea, you don't have to explicitly check for NULL here
     while(local_pool_mgr_pt->node_heap[i].next != NULL){
         //Assign the allocated property to the segments array for each allocated node in node_heap
         //for each node, write the size and allocated in the segments
-        segments_array[i].allocated = local_pool_mgr_pt->node_heap[i].alloc_record.size;
-        segments_array[i].size = local_pool_mgr_pt->node_heap[i].allocated;
+        segments_array[i].allocated = local_pool_mgr_pt->node_heap[i].allocated;
+        segments_array[i].size = local_pool_mgr_pt->node_heap[i].alloc_record.size;
         ++i;
     }
-    
     // "return" the values:
         //Code given by Ivo in the default file below:
     *segments = segments_array;
