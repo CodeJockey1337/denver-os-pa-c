@@ -551,17 +551,16 @@ static alloc_status _mem_resize_pool_store() {
     //  "necessary" to resize when size/cap > 0.75
     if (((float)pool_store_size / (float)pool_store_capacity) > MEM_POOL_STORE_FILL_FACTOR){
 
-
-        pool_store = (pool_mgr_pt *)realloc(pool_store, (sizeof(pool_mgr_t)*pool_store_capacity + 1));
+        float expandFactor = pool_store_capacity * MEM_POOL_STORE_EXPAND_FACTOR;
+        pool_store = (pool_mgr_pt *)realloc(pool_store, (sizeof(pool_mgr_pt) * expandFactor));
         //Verify the realloc worked
         if(pool_store == NULL){
-
             return ALLOC_FAIL;
         }
         //double check that pool_store isnt NULL after realloc
         assert(pool_store);
         //Update capacity variable
-        pool_store_capacity++;
+        pool_store_capacity = expandFactor;
 
         return ALLOC_OK;
     }
