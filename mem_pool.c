@@ -596,16 +596,15 @@ static alloc_status _mem_resize_node_heap(pool_mgr_pt pool_mgr_ptr) {
 
 
 static alloc_status _mem_resize_gap_ix(pool_mgr_pt pool_mgr) {
-
-    float expandFactor = (float)MEM_GAP_IX_EXPAND_FACTOR * (float)pool_mgr->gap_ix_capacity;
     //Does gap_ix need to be resized?
     if((((float)pool_mgr->pool.num_gaps)/(pool_mgr->gap_ix_capacity)) > MEM_GAP_IX_FILL_FACTOR){
+        unsigned int expandFactor = MEM_GAP_IX_EXPAND_FACTOR * pool_mgr->gap_ix_capacity;
         //resize if needed
         //Perform realloc to increase size of gap_ix
         pool_mgr->gap_ix = realloc(pool_mgr->gap_ix, expandFactor * sizeof(gap_t));
         //update metadata
         //  Expand the gap_ix_capacity by the same factor as the realloc
-        pool_mgr->gap_ix_capacity *= MEM_GAP_IX_EXPAND_FACTOR;
+        pool_mgr->gap_ix_capacity = expandFactor;
         //Check and make sure it worked
         if(NULL == pool_mgr->gap_ix){
 
@@ -626,7 +625,7 @@ static alloc_status _mem_add_to_gap_ix(pool_mgr_pt pool_mgr,
     pool_mgr->gap_ix[pool_mgr->pool.num_gaps].node = node;
     pool_mgr->gap_ix[pool_mgr->pool.num_gaps].size = size;
     // update metadata (num_gaps)
-    pool_mgr->pool.num_gaps ++;
+    pool_mgr->pool.num_gaps++;
     // sort the gap index (call the function)
     alloc_status sortCheck = _mem_sort_gap_ix(pool_mgr);
     // check success
@@ -652,7 +651,7 @@ static alloc_status _mem_remove_from_gap_ix(pool_mgr_pt pool_mgr,
         }
     }
     if(flag == 0){
-        // debug("FAIL: flag == 0 in _mem_remove_from_gap_ix");
+        //debug("FAIL: flag == 0 in _mem_remove_from_gap_ix");
         return ALLOC_FAIL;
     }
     // loop from there to the end of the array:
@@ -669,27 +668,33 @@ static alloc_status _mem_remove_from_gap_ix(pool_mgr_pt pool_mgr,
     pool_mgr->gap_ix[pool_mgr->pool.num_gaps].size = 0;
     pool_mgr->gap_ix[pool_mgr->pool.num_gaps].node = NULL;
 
-    //*****DO WE WANT TO SORT THE GAP_IX HERE?*******
-    //Don't think we need to....
-
     return ALLOC_OK;
 }
 
 // note: only called by _mem_add_to_gap_ix, which appends a single entry
 static alloc_status _mem_sort_gap_ix(pool_mgr_pt pool_mgr) {
-    for(int i = 0; i < pool_mgr->pool.num_gaps; ++i){
-        int swapped = 0;
-        for(int j = 0; i < pool_mgr->pool.num_gaps; ++i){
-            if(pool_mgr->gap_ix[i].size < pool_mgr->gap_ix[i+1].size){
-                gap_t swap = pool_mgr->gap_ix[i];
-                pool_mgr->gap_ix[i] = pool_mgr->gap_ix[i+1];
-                pool_mgr->gap_ix[i+1] = swap;
-                swapped = 1;
-
-            }
-        }
-        if(swapped == 0) break;
+    //Check and see if gap_ix has 0 or 1 member, if so sorting is not required....
+    if(pool_mgr->pool.num_gaps <= 1){
+        return ALLOC_OK;
     }
 
+    // the new entry is at the end, so "bubble it up"
+    // loop from num_gaps - 1 until but not including 0:
+    int counter = pool_mgr->pool.num_gaps -1;
+    for(counter ; counter > 0 ; counter--){
+        //    if the size of the current entry is less than the previous (u - 1)
+        //    or if the sizes are the same but the current entry points to a
+        //    node with a lower address of pool allocation address (mem)
+        //       swap them (by copying) (remember to use a temporary variable)
+        gap_t gap1 = pool_mgr->gap_ix[counter];
+        gap_t gap2 = pool_mgr->gap_ix[counter-1];
+        if(gap1.size < gap2.size
+           || (gap1.size == gap2.size
+               && gap1.node->alloc_record.mem < gap2.node->alloc_record.mem)){
+            gap_t temp_gap_t = gap1;
+            gap1 = gap2;
+            gap2 = temp_gap_t;
+        }
+    }
     return ALLOC_OK;
 }
