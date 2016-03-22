@@ -711,7 +711,7 @@ void mem_inspect_pool(pool_pt pool,
 //This method is called from mem_pool_open()
 static alloc_status _mem_resize_pool_store() {
     debug("FUNCTION CALL: _mem_resize_pool_store() has been called\n");
-    float expandFactor = pool_store_capacity * MEM_EXPAND_FACTOR;
+    float expandFactor = pool_store_capacity * MEM_POOL_STORE_EXPAND_FACTOR;
     //Check if the pool_store needs to be resized
     //  "necessary" to resize when size/cap > 0.75
     if (((float)pool_store_size / (float)pool_store_capacity) > MEM_POOL_STORE_FILL_FACTOR){
@@ -744,8 +744,8 @@ static alloc_status _mem_resize_node_heap(pool_mgr_pt pool_mgr_ptr) {
     if(((float)pool_mgr_ptr->used_nodes / (float)pool_mgr_ptr->total_nodes) > MEM_NODE_HEAP_FILL_FACTOR){
         //Reallocate more nodes to the node_heap, by the size of the
         //Perform the realloc straight to the node_heap pointer
-        pool_mgr_ptr->node_heap = (node_pt)realloc(pool_mgr_ptr->node_heap,
-            MEM_NODE_HEAP_EXPAND_FACTOR * pool_mgr_ptr->total_nodes * sizeof(node_t));
+        float expandFactor = (float)MEM_NODE_HEAP_EXPAND_FACTOR * (float)pool_mgr_ptr->total_nodes;
+        pool_mgr_ptr->node_heap = realloc(pool_mgr_ptr->node_heap, expandFactor * sizeof(node_t));
         //Check and see if the realloc failed
         if (NULL == pool_mgr_ptr->node_heap){
             debug("FAIL: realloc in _mem_resize_node_heap was catastrophic!!");
